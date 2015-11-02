@@ -14,14 +14,14 @@ This SDK provides the python libraries needed to make use of the [Web Shrinker](
 The best way to install is by using pip:
 
 ```bash
-$ pip install webshrinker-sdk
+$ pip install webshrinker
 ```
 
 The SDK also depends on the "requests" package which should be installed by pip automatically.
 
 ### Making Requests
 
-Here is an example categorization request, just replace the <access key> and <secret key> placeholders with your actual account keys.
+Here is an example categorization request, just replace the &lt;access key&gt; and &lt;secret key&gt; placeholders with your actual account keys.
 You can find and create access keys via the [Account Dashboard](https://dashboard.webshrinker.com).
 
 ```python
@@ -72,6 +72,6 @@ except webshrinker.RequestLimitException as e:
 
 ### Options
 
-* set_keep_alive(True|False): Enable/disable the use of session in the requests module which supports keep-alive
-* set_verify_ssl(True|False): Enable/disable the verification of the SSL endpoint
-* set_timeout(seconds): Sets the amount of time to wait for an API connection before raising an exception
+* set_keep_alive(True|False): Enable/disable the use of session in the requests module which supports keep-alive (default: True)
+* set_verify_ssl(True|False): Enable/disable the verification of the SSL endpoint (default: True)
+* set_timeout(seconds): Sets the amount of time to wait for an API connection before raising an exception (default: 10 seconds)

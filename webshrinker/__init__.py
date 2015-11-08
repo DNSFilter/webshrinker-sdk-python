@@ -66,13 +66,39 @@ class WebShrinker(object):
         if self.debug:
             print "Requesting: " + url
 
-        data = {}
         try:
             response = session.get(url, headers=self.request_headers, verify=self.verify_ssl, timeout=self.request_timeout)
-            data = response.json()
         except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, 
                 requests.exceptions.Timeout, requests.exceptions.TooManyRedirects) as e:
                 raise RequestException(e.message)            
+
+        return response
+
+    def request_image(self, method, parameter=None):
+        response = self.request(method, parameter)
+
+        if response.status_code == 200:
+            if not "content-type" in response.headers:
+                raise ResponseException(response, {"error": "The content-type header is missing"})
+
+            if response.headers["content-type"] != "image/png":
+                raise ResponseException(response, {
+                    "error": "Expected image/png data as a response but received '%s'" % response.headers["content-type"]
+                })
+
+            return response.content
+        elif response.status_code == 400:
+            raise RequestException("One or more parameters in the request URL are invalid")
+        elif response.status_code == 401:
+            raise UnauthorizedException()
+        elif response.status_code == 402:
+            raise RequestLimitException()
+        else:
+            raise ResponseException(response)
+
+    def request_json(self, method, parameter=None):
+        response = self.request(method, parameter)
+        data = response.json()
 
         if response.status_code == 200:
             if self.debug:
@@ -117,7 +143,7 @@ class ResponseException(Exception):
         super(self.__class__, self).__init__(message)
 
 class UnauthorizedException(Exception):
-    def __init__(self, data):
+    def __init__(self, data={}):
         message = "Bad or missing API key, x-api-key, or x-api-secret HTTP headers"
 
         if "error" in data:
@@ -126,7 +152,7 @@ class UnauthorizedException(Exception):
         super(self.__class__, self).__init__(message)
 
 class RequestLimitException(Exception):
-    def __init__(self, data):
+    def __init__(self, data={}):
         message = "Account request limit reached - purchase additional requests through the account dashboard"
 
         if "error" in data:
@@ -146,7 +172,7 @@ class Categories(WebShrinker):
             "categories": []
         }
 
-        data = super(self.__class__, self).request("list")
+        data = self.request_json("list")
 
         result = default_data.copy()
         result.update(data)
@@ -160,10 +186,33 @@ class Categories(WebShrinker):
         }
 
         base64_parameter = base64.b64encode(uri)
-        data = super(self.__class__, self).request("lookup", base64_parameter)
+        data = self.request_json("lookup", base64_parameter)
 
         result = default_data.copy()
         result.update(data)
         return result
         
+class Thumbnails(WebShrinker):
+    base64_url = False
 
+    def __init__(self, accesskey, secretkey):
+        super(self.__class__, self).__init__(accesskey, secretkey)
+        self.request_type = "thumbnails"
+        self.request_version = "v2"
+
+    def image(self, url=None, size="xlarge", refresh=False):
+        if not url:
+            raise RequestException("The 'url' parameter is required")
+
+        parameters = "size:%s" % size
+
+        if refresh != False:
+            parameters = "%s/refresh:1" % parameters
+
+        if self.base64_url:
+            url = base64.b64encode(url)
+
+        parameters = "%s/url:%s" % (parameters, url)
+
+        image = self.request_image("image", parameters)
+        return image

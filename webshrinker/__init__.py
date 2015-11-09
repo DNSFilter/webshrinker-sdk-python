@@ -1,6 +1,7 @@
 import sys
 import requests
 import base64
+import md5
 
 class WebShrinker(object):
     end_point = "https://api.webshrinker.com"
@@ -50,6 +51,20 @@ class WebShrinker(object):
     def set_timeout(self, timeout):
         self.request_timeout = timeout
 
+    def signed_url(self, method, parameter=None):
+        url_part1 = "%s/%s/%s/key:%s" % (self.request_type, self.request_version, method, self.request_headers["x-api-key"])
+
+        url_part2 = ""
+        if parameter != None:
+            url_part2 = "/%s" % parameter
+
+        to_hash = "%s%s%s" % (self.request_headers["x-api-secret"], url_part1, url_part2)
+        hash = md5.new(to_hash).hexdigest()
+
+        url = "%s/%s/hash:%s%s" % (self.end_point, url_part1, hash, url_part2)
+
+        return url
+
     def request(self, method, parameter=None):
         url = "%s/%s/%s/%s" % (self.end_point, self.request_type, self.request_version, method)
 
@@ -86,7 +101,17 @@ class WebShrinker(object):
                     "error": "Expected image/png data as a response but received '%s'" % response.headers["content-type"]
                 })
 
-            return response.content
+            data = {
+                "success": True,
+                "image": base64.b64encode(response.content)
+            }
+
+            if "thumbnail-state" in response.headers:
+                data["state"] = response.headers["thumbnail-state"]
+            if "last-modified" in response.headers:
+                data["modified"] = response.headers["last-modified"]
+
+            return data
         elif response.status_code == 400:
             raise RequestException("One or more parameters in the request URL are invalid")
         elif response.status_code == 401:
@@ -201,6 +226,13 @@ class Thumbnails(WebShrinker):
         self.request_version = "v2"
 
     def image(self, url=None, size="xlarge", refresh=False):
+        default_data = {
+            "success": False,
+            "image": None,
+            "state": "ERROR",
+            "modified": 0
+        }
+
         if not url:
             raise RequestException("The 'url' parameter is required")
 
@@ -214,5 +246,10 @@ class Thumbnails(WebShrinker):
 
         parameters = "%s/url:%s" % (parameters, url)
 
-        image = self.request_image("image", parameters)
-        return image
+        default_data["url"] = self.signed_url("image", parameters)
+
+        data = self.request_image("image", parameters)
+        result = default_data.copy()
+        result.update(data)
+
+        return result

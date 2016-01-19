@@ -8,7 +8,7 @@ setup(
     packages = ['webshrinker'],
     description = 'Provides access to the Web Shrinker API services, including website category lookups.',
     author = 'Web Shrinker',
-    version = '1.0',
+    version = '2.0',
     license = 'LICENSE.txt',
     url = 'https://github.com/webshrinker/webshrinker-sdk-python',
     download_url = 'https://github.com/webshrinker/webshrinker-sdk-python/tarball/1.0',

@@ -6,11 +6,9 @@ import md5
 class WebShrinker(object):
     end_point = "https://api.webshrinker.com"
     request_type = "unknown"
-    request_version = "v1"
+    request_version = "v2"
     request_headers = {
-        "x-api-key": "no-api-key-set",
-        "x-api-secret": "no-api-secret-key-set",
-        "user-agent": "webshrinker-python/1.0"
+        "user-agent": "webshrinker-python/2.0"
     }
     request_timeout = 10
 
@@ -20,9 +18,12 @@ class WebShrinker(object):
     verify_ssl = True
     disable_old_python_warnings = True
 
-    def __init__(self, accesskey, secretkey):
-        self.set_access_key(accesskey)
-        self.set_secret_key(secretkey)
+    access_key = ""
+    secret_key = ""
+
+    def __init__(self, access_key, secret_key):
+        self.set_access_key(access_key)
+        self.set_secret_key(secret_key)
 
         # If running on Python < 2.7.9 the requests/urllib3 libraries display warnings about possibly insecure SSL connections,
         # best option is to upgrade to Python >= 2.7.9
@@ -30,11 +31,11 @@ class WebShrinker(object):
             if (sys.version_info[0] == 2 and sys.version_info[1] == 7) and sys.version_info[2] < 9:
                 requests.packages.urllib3.disable_warnings()
 
-    def set_access_key(self, accesskey):
-        self.request_headers["x-api-key"] = accesskey
+    def set_access_key(self, access_key):
+        self.access_key = access_key
 
-    def set_secret_key(self, secretkey):
-        self.request_headers["x-api-secret"] = secretkey
+    def set_secret_key(self, secret_key):
+        self.secret_key = secret_key
 
     def set_end_point(self, end_point):
         self.end_point = end_point
@@ -51,32 +52,40 @@ class WebShrinker(object):
     def set_timeout(self, timeout):
         self.request_timeout = timeout
 
-    def signed_url(self, method, parameter=None):
-        url_part1 = "%s/%s/%s/key:%s" % (self.request_type, self.request_version, method, self.request_headers["x-api-key"])
+    def signed_url(self, method, parameters=None):
+        if parameters == None:
+            parameters = {}
 
-        url_part2 = ""
-        if parameter != None:
-            url_part2 = "/%s" % parameter
+        parameters["key"] = self.access_key
 
-        to_hash = "%s%s%s" % (self.request_headers["x-api-secret"], url_part1, url_part2)
+        url = "%s/%s" % (self.request_type, self.request_version)
+
+        if method != None:
+            url = "%s/%s" % (url, method)
+
+        query = ""
+        for key, value in parameters.items():
+            if query == "":
+                query = "%s=%s" % (key, value)
+            else:
+                query = "%s&%s=%s" % (query, key, value)
+
+        url = "%s?%s" % (url, query)
+        to_hash = "%s:%s" % (self.secret_key, url)
         hash = md5.new(to_hash).hexdigest()
-
-        url = "%s/%s/hash:%s%s" % (self.end_point, url_part1, hash, url_part2)
+        url = "%s/%s&hash=%s" % (self.end_point, url, hash)
 
         return url
 
-    def request(self, method, parameter=None):
-        url = "%s/%s/%s/%s" % (self.end_point, self.request_type, self.request_version, method)
-
-        if parameter != None:
-            url = "%s/%s" % (url, parameter)
-
+    def request(self, method, parameters=None):
         session = requests
 
         if self.use_keepalive:
             if self.session == None:
                 self.session = requests.Session()
             session = self.session
+
+        url = self.signed_url(method, parameters)
 
         if self.debug:
             print "Requesting: " + url
@@ -89,29 +98,17 @@ class WebShrinker(object):
 
         return response
 
-    def request_image(self, method, parameter=None):
-        response = self.request(method, parameter)
+    def request_image(self, method, parameters=None):
+        response = self.request(method, parameters)
 
-        if response.status_code == 200:
+        if response.status_code == 200 or response.status_code == 202:
             if not "content-type" in response.headers:
-                raise ResponseException(response, {"error": "The content-type header is missing"})
+                raise ResponseException(response, error="The content-type header is missing")
 
             if response.headers["content-type"] != "image/png":
-                raise ResponseException(response, {
-                    "error": "Expected image/png data as a response but received '%s'" % response.headers["content-type"]
-                })
+                raise ResponseException(response, error="Expected image/png data as a response but received '%s'" % response.headers["content-type"])
 
-            data = {
-                "success": True,
-                "image": base64.b64encode(response.content)
-            }
-
-            if "thumbnail-state" in response.headers:
-                data["state"] = response.headers["thumbnail-state"]
-            if "last-modified" in response.headers:
-                data["modified"] = response.headers["last-modified"]
-
-            return data
+            return response, response.content
         elif response.status_code == 400:
             raise RequestException("One or more parameters in the request URL are invalid")
         elif response.status_code == 401:
@@ -125,63 +122,52 @@ class WebShrinker(object):
         response = self.request(method, parameter)
         data = response.json()
 
-        if response.status_code == 200:
+        if response.status_code == 200 or response.status_code == 202:
             if self.debug:
                 if response.headers["content-type"] != "application/json":
                     print "Warning: expected content type 'application/json', got '%s'" % response.headers["content-type"]
 
-            # sanity check
-            if "success" in data:
-                return data
-
-            # if we don't have a 'success' parameter than something went wrong
-            if self.debug:
-                print "Response error: status code %d, content: %s" % (response.status_code, data)
-
-            data["success"] = False
-            if not "error" in data:
-                data["error"] = "An unknown error occurred, expected success but found none"
-            raise ResponseException(response, data)
+            return response, data["data"][0]
+        elif response.status_code == 400:
+            raise RequestException(data["error"]["message"])
         elif response.status_code == 401:
-            raise UnauthorizedException(data)
+            raise UnauthorizedException(data["error"]["message"])
         elif response.status_code == 402:
-            raise RequestLimitException(data)
+            raise RequestLimitException(data["error"]["message"])
         else:
-            raise ResponseException(response, data)
+            raise ResponseException(response, data["error"]["message"])
 
 class RequestException(Exception):
     def __init__(self, message):
         super(self.__class__, self).__init__(message)
 
 class ResponseException(Exception):
-    def __init__(self, response, data={}):
+    def __init__(self, response, error=""):
         message = ""
 
         if "status_code" in response:
             message = "Error %d: " % response.status_code
 
-        if "error" in data:
-            message += data["error"]
-        else:
-            message += "An unknown error occurred, retry the request again"
+        if error != "":
+            message += error
 
         super(self.__class__, self).__init__(message)
 
 class UnauthorizedException(Exception):
-    def __init__(self, data={}):
+    def __init__(self, error=""):
         message = "Bad or missing API key, x-api-key, or x-api-secret HTTP headers"
 
-        if "error" in data:
-            message = data["error"]
+        if error != "":
+            message = error
 
         super(self.__class__, self).__init__(message)
 
 class RequestLimitException(Exception):
-    def __init__(self, data={}):
+    def __init__(self, error=""):
         message = "Account request limit reached - purchase additional requests through the account dashboard"
 
-        if "error" in data:
-            message = data["error"]
+        if error != "":
+            message = error
 
         super(self.__class__, self).__init__(message)
 
@@ -189,67 +175,71 @@ class Categories(WebShrinker):
     def __init__(self, accesskey, secretkey):
         super(self.__class__, self).__init__(accesskey, secretkey)
         self.request_type = "categories"
-        self.request_version = "v1"
+        self.request_version = "v2"
 
     def list(self):
-        default_data = {
-            "success": False,
-            "categories": []
-        }
+        (response, result) = self.request_json(None)
 
-        data = self.request_json("list")
-
-        result = default_data.copy()
-        result.update(data)
         return result
 
     def lookup(self, uri):
-        default_data = {
-            "success": False,
-            "categorizing": False,
-            "categories": []
-        }
+        url = base64.b64encode(uri)
+        (response, result) = self.request_json(url)
 
-        base64_parameter = base64.b64encode(uri)
-        data = self.request_json("lookup", base64_parameter)
+        result["categorizing"] = False
+        if response.status_code == 202:
+            result["categorizing"] = True
 
-        result = default_data.copy()
-        result.update(data)
         return result
         
 class Thumbnails(WebShrinker):
-    base64_url = False
-
     def __init__(self, accesskey, secretkey):
         super(self.__class__, self).__init__(accesskey, secretkey)
         self.request_type = "thumbnails"
         self.request_version = "v2"
 
-    def image(self, url=None, size="xlarge", refresh=False):
-        default_data = {
-            "success": False,
-            "image": None,
-            "state": "ERROR",
-            "modified": 0
-        }
-
+    def image(self, url=None, size="xlarge", refresh=False, expires=False, fullpage=False):
         if not url:
             raise RequestException("The 'url' parameter is required")
 
-        parameters = "size:%s" % size
+        url = base64.b64encode(url)
+
+        parameters = { 
+            "size" : size
+        }
 
         if refresh != False:
-            parameters = "%s/refresh:1" % parameters
+            parameters["refresh"] = 1
 
-        if self.base64_url:
-            url = base64.b64encode(url)
+        if expires != False:
+            parameters["expires"] = int(expires)
 
-        parameters = "%s/url:%s" % (parameters, url)
+        if fullpage != False:
+            parameters["fullpage"] = 1
 
-        default_data["url"] = self.signed_url("image", parameters)
+        (response, result) = self.request_image(url, parameters)
 
-        data = self.request_image("image", parameters)
-        result = default_data.copy()
-        result.update(data)
+        return result
+
+    def info(self, url=None, size="xlarge", refresh=False, expires=False, fullpage=False):
+        if not url:
+            raise RequestException("The 'url' parameter is required")
+
+        url = "%s/info" % base64.b64encode(url)
+
+        parameters = { 
+            "size" : size
+        }
+
+        if refresh != False:
+            parameters["refresh"] = 1
+
+        if expires != False:
+            parameters["expires"] = int(expires)
+
+        if fullpage != False:
+            parameters["fullpage"] = 1
+
+        (response, result) = self.request_json(url, parameters)
 
         return result

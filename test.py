@@ -15,7 +15,7 @@ ws.debug = True
 # this will return information about the thumbnail image for the URL: https://www.webshrinker.com
 try:
     print "Running ws.image() ..."
-    response = ws.image(url)
+    response = ws.image(url, size="xlarge")
     # the response variable contains the PNG image data
 except webshrinker.RequestException as e:
     # an error happened while making the request (possible DNS or connection timeout issue)
@@ -57,6 +57,7 @@ print "\n"
 ####################################
 
 ws = webshrinker.Categories(access_key, secret_key)
+ws.debug = True
 
 # this will list all the possible categories a website, URL, or IP address can be in
 try:

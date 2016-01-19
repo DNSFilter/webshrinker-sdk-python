@@ -11,7 +11,7 @@ setup(
     version = '2.0',
     license = 'LICENSE.txt',
     url = 'https://github.com/webshrinker/webshrinker-sdk-python',
-    download_url = 'https://github.com/webshrinker/webshrinker-sdk-python/tarball/1.0',
+    download_url = 'https://github.com/webshrinker/webshrinker-sdk-python/tarball/2.0',
     install_requires = [
         "requests >= 2.8.1",
         "requests[security]"

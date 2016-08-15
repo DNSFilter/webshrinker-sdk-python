@@ -1,7 +1,7 @@
 import sys
 import requests
 import base64
-import md5
+import hashlib
 
 class WebShrinker(object):
     end_point = "https://api.webshrinker.com"
@@ -72,7 +72,7 @@ class WebShrinker(object):
 
         url = "%s?%s" % (url, query)
         to_hash = "%s:%s" % (self.secret_key, url)
-        hash = md5.new(to_hash).hexdigest()
+        hash = hashlib.md5(to_hash).hexdigest()
         url = "%s/%s&hash=%s" % (self.end_point, url, hash)
 
         return url

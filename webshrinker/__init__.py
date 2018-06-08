@@ -72,8 +72,8 @@ class WebShrinker(object):
 
         url = "%s?%s" % (url, query)
         to_hash = "%s:%s" % (self.secret_key, url)
-        hash = hashlib.md5(to_hash).hexdigest()
-        url = "%s/%s&hash=%s" % (self.end_point, url, hash)
+        hash_ = hashlib.md5(to_hash.encode()).hexdigest()
+        url = "%s/%s&hash=%s" % (self.end_point, url, hash_)
 
         return url
 
@@ -88,7 +88,7 @@ class WebShrinker(object):
         url = self.signed_url(method, parameters)
 
         if self.debug:
-            print "Requesting: " + url
+            print("Requesting: " + url)
 
         try:
             response = session.get(url, headers=self.request_headers, verify=self.verify_ssl, timeout=self.request_timeout)
@@ -125,7 +125,7 @@ class WebShrinker(object):
         if response.status_code == 200 or response.status_code == 202:
             if self.debug:
                 if response.headers["content-type"] != "application/json":
-                    print "Warning: expected content type 'application/json', got '%s'" % response.headers["content-type"]
+                    print("Warning: expected content type 'application/json', got '%s'" % response.headers["content-type"])
 
             return response, data["data"][0]
         elif response.status_code == 400:
@@ -183,7 +183,7 @@ class Categories(WebShrinker):
         return result
 
     def lookup(self, uri):
-        url = base64.b64encode(uri)
+        url = base64.b64encode(uri.encode()).decode()
         (response, result) = self.request_json(url)
 
         result["categorizing"] = False
@@ -202,7 +202,7 @@ class Thumbnails(WebShrinker):
         if not url:
             raise RequestException("The 'url' parameter is required")
 
-        url = base64.b64encode(url)
+        url = base64.b64encode(url.encode()).decode()
 
         parameters = { 
             "size" : size
@@ -225,7 +225,7 @@ class Thumbnails(WebShrinker):
         if not url:
             raise RequestException("The 'url' parameter is required")
 
-        url = "%s/info" % base64.b64encode(url)
+        url = "%s/info" % base64.b64encode(url.encode()).decode()
 
         parameters = { 
             "size" : size
